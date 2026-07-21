@@ -120,7 +120,13 @@
         <!-- TAB 2: POST CREATOR -->
         <section id="tab-post" class="tab-content hidden space-y-6">
             <div class="glass p-5 rounded-2xl space-y-4">
-                <h2 class="text-lg font-semibold text-red-500 border-b border-red-500/20 pb-2"><i class="fa-solid fa-pen-to-square"></i> Generate Post</h2>
+                <!-- Header with Clear/Cancel Option -->
+                <div class="flex items-center justify-between border-b border-red-500/20 pb-2">
+                    <h2 class="text-lg font-semibold text-red-500"><i class="fa-solid fa-pen-to-square"></i> Generate Post</h2>
+                    <button onclick="clearPostForm()" class="text-xs bg-red-950/40 hover:bg-red-900/60 border border-red-500/30 text-red-400 px-2.5 py-1 rounded-lg transition-all flex items-center gap-1.5">
+                        <i class="fa-solid fa-trash-can text-[10px]"></i> Clear Form
+                    </button>
+                </div>
                 
                 <!-- Poster Preview -->
                 <div id="poster-preview-container" class="hidden flex justify-center">
@@ -447,6 +453,20 @@
             switchTab('post');
         }
 
+        // Reset and clear the entire post form
+        function clearPostForm() {
+            if (confirm('Are you sure you want to clear the form?')) {
+                document.getElementById('post-movie-id').value = '';
+                document.getElementById('post-title').value = '';
+                document.getElementById('post-rating').value = '';
+                document.getElementById('post-release').value = '';
+                document.getElementById('post-desc').value = '';
+                document.getElementById('post-img-url').value = '';
+                document.getElementById('poster-preview-container').classList.add('hidden');
+                document.getElementById('poster-preview').src = '';
+            }
+        }
+
         // Copy Post text with specific requested styling format
         function copyPostText() {
             const title = document.getElementById('post-title').value.trim();
@@ -473,40 +493,47 @@
                 .catch(err => console.error(err));
         }
 
-        // Download Image (Canvas & CORS fallback to trigger direct download)
+        // Direct Download with High Quality and CORS/Cache Bypass
         async function downloadPoster() {
             const imgUrl = document.getElementById('post-img-url').value;
             const title = document.getElementById('post-title').value || 'movie_poster';
 
-            if (!imgUrl) return;
+            if (!imgUrl) {
+                alert('No image to download.');
+                return;
+            }
 
+            // Convert to high resolution "original" poster from TMDB [1]
+            const highResUrl = imgUrl.replace('/p/w500/', '/p/original/');
             const safeName = title.toLowerCase().replace(/[^a-z0-9]+/g, '_') + '_poster.jpg';
 
+            // Visual feedback on button
+            const downloadBtn = document.querySelector('button[onclick="downloadPoster()"]');
+            const originalHTML = downloadBtn.innerHTML;
+            downloadBtn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Downloading...`;
+            downloadBtn.disabled = true;
+
             try {
-                // Method 1: Fetch as Blob directly
-                const response = await fetch(imgUrl);
-                const blob = await response.blob();
-                const blobUrl = window.URL.createObjectURL(blob);
-                
-                const link = document.createElement('a');
-                link.href = blobUrl;
-                link.download = safeName;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                window.URL.revokeObjectURL(blobUrl);
-            } catch (err) {
-                console.warn("Blob fetch failed, falling back to Canvas bypass:", err);
-                // Method 2: Fallback draw on canvas (bypasses direct save restriction in some browsers)
+                // Canvas rendering with cache-buster is used to resolve CORS/Cache lockouts safely
                 const img = new Image();
-                img.crossOrigin = 'anonymous';
+                img.crossOrigin = 'anonymous'; // TMDB allows CORS on anonymous requests [1]
+                
+                // Add timestamp query parameter to bypass browser cached CORS mismatch
+                img.src = highResUrl + (highResUrl.includes('?') ? '&' : '?') + 't=' + new Date().getTime();
+                
                 img.onload = function() {
                     const canvas = document.createElement('canvas');
                     canvas.width = img.width;
                     canvas.height = img.height;
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0);
+                    
                     canvas.toBlob((blob) => {
+                        if (!blob) {
+                            alert('Could not render image.');
+                            resetBtn();
+                            return;
+                        }
                         const blobUrl = window.URL.createObjectURL(blob);
                         const link = document.createElement('a');
                         link.href = blobUrl;
@@ -515,9 +542,26 @@
                         link.click();
                         document.body.removeChild(link);
                         window.URL.revokeObjectURL(blobUrl);
-                    }, 'image/jpeg', 0.95);
+
+                        resetBtn();
+                    }, 'image/jpeg', 1.0); // Maximum quality JPEG encoding (1.0)
                 };
-                img.src = imgUrl;
+
+                img.onerror = function() {
+                    // Fallback to opening link directly if browser denies canvas rendering
+                    window.open(highResUrl, '_blank');
+                    resetBtn();
+                };
+
+            } catch (err) {
+                console.error("Canvas export failed: ", err);
+                window.open(highResUrl, '_blank');
+                resetBtn();
+            }
+
+            function resetBtn() {
+                downloadBtn.innerHTML = originalHTML;
+                downloadBtn.disabled = false;
             }
         }
 
@@ -593,4 +637,4 @@
         }
     </script>
 </body>
-</html>
+    </html>
