@@ -21,6 +21,15 @@
         body {
             background: radial-gradient(circle at top right, rgba(239, 68, 68, 0.15), transparent 40%), #0a0a0a;
         }
+        /* Hide scrollbar for Chrome, Safari and Opera */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        /* Hide scrollbar for IE, Edge and Firefox */
+        .no-scrollbar {
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
+        }
     </style>
 </head>
 <body class="text-gray-200 min-h-screen pb-24 font-sans selection:bg-red-500 selection:text-white">
@@ -50,19 +59,43 @@
                 </div>
             </div>
 
-            <!-- Search Results Container -->
+            <!-- Search Results Container (Horizontal) -->
             <div id="search-results-section" class="hidden space-y-4">
                 <h3 class="text-md font-semibold text-red-400 flex items-center justify-between">
                     <span>Search Results</span>
                     <button id="close-search" class="text-xs text-zinc-400 hover:text-white">Clear</button>
                 </h3>
-                <div id="search-results" class="grid grid-cols-1 gap-4"></div>
+                <div id="search-results" class="flex gap-4 overflow-x-auto pb-2 no-scrollbar"></div>
             </div>
 
             <!-- Trending Feed -->
             <div class="space-y-4">
                 <h3 class="text-md font-semibold text-zinc-300 border-l-4 border-red-500 pl-2">Trending Today</h3>
-                <div id="trending-feed" class="grid grid-cols-1 gap-4">
+                <div id="trending-feed" class="flex gap-4 overflow-x-auto pb-2 no-scrollbar">
+                    <p class="text-xs text-zinc-500">Loading...</p>
+                </div>
+            </div>
+
+            <!-- Bangla Feed -->
+            <div class="space-y-4">
+                <h3 class="text-md font-semibold text-zinc-300 border-l-4 border-red-500 pl-2">Bangla Content</h3>
+                <div id="bangla-feed" class="flex gap-4 overflow-x-auto pb-2 no-scrollbar">
+                    <p class="text-xs text-zinc-500">Loading...</p>
+                </div>
+            </div>
+
+            <!-- Hindi Feed -->
+            <div class="space-y-4">
+                <h3 class="text-md font-semibold text-zinc-300 border-l-4 border-red-500 pl-2">Hindi Content</h3>
+                <div id="hindi-feed" class="flex gap-4 overflow-x-auto pb-2 no-scrollbar">
+                    <p class="text-xs text-zinc-500">Loading...</p>
+                </div>
+            </div>
+
+            <!-- English Feed -->
+            <div class="space-y-4">
+                <h3 class="text-md font-semibold text-zinc-300 border-l-4 border-red-500 pl-2">English Content</h3>
+                <div id="english-feed" class="flex gap-4 overflow-x-auto pb-2 no-scrollbar">
                     <p class="text-xs text-zinc-500">Loading...</p>
                 </div>
             </div>
@@ -70,7 +103,7 @@
             <!-- Popular Movies Feed -->
             <div class="space-y-4">
                 <h3 class="text-md font-semibold text-zinc-300 border-l-4 border-red-500 pl-2">Popular Movies</h3>
-                <div id="popular-movies" class="grid grid-cols-1 gap-4">
+                <div id="popular-movies" class="flex gap-4 overflow-x-auto pb-2 no-scrollbar">
                     <p class="text-xs text-zinc-500">Loading...</p>
                 </div>
             </div>
@@ -78,7 +111,7 @@
             <!-- Popular Series Feed -->
             <div class="space-y-4">
                 <h3 class="text-md font-semibold text-zinc-300 border-l-4 border-red-500 pl-2">Popular Series</h3>
-                <div id="popular-series" class="grid grid-cols-1 gap-4">
+                <div id="popular-series" class="flex gap-4 overflow-x-auto pb-2 no-scrollbar">
                     <p class="text-xs text-zinc-500">Loading...</p>
                 </div>
             </div>
@@ -100,9 +133,15 @@
                         <label class="text-xs text-zinc-400 block mb-1">Title</label>
                         <input type="text" id="post-title" class="w-full bg-zinc-900/80 border border-zinc-800 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-red-500 font-bold">
                     </div>
-                    <div>
-                        <label class="text-xs text-zinc-400 block mb-1">IMDb Rating</label>
-                        <input type="text" id="post-rating" class="w-full bg-zinc-900/80 border border-zinc-800 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-red-500">
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="text-xs text-zinc-400 block mb-1">IMDb Rating</label>
+                            <input type="text" id="post-rating" class="w-full bg-zinc-900/80 border border-zinc-800 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-red-500">
+                        </div>
+                        <div>
+                            <label class="text-xs text-zinc-400 block mb-1">Release Date</label>
+                            <input type="text" id="post-release" class="w-full bg-zinc-900/80 border border-zinc-800 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-red-500">
+                        </div>
                     </div>
                     <div>
                         <label class="text-xs text-zinc-400 block mb-1">Description</label>
@@ -239,7 +278,7 @@
             // Switch tab to first page
             switchTab('tmdb');
 
-            // Fetch list
+            // Fetch lists
             fetchFeeds();
 
             // Background Load Cloud list
@@ -283,12 +322,27 @@
         // Fetch API Helper
         async function fetchFeeds() {
             try {
+                // Trending Feed
                 fetchData(`${TMDB_BASE_URL}/trending/all/day?api_key=${TMDB_API_KEY}`)
                     .then(data => renderFeed(data.results, 'trending-feed'));
                 
+                // Bangla Feed
+                fetchData(`${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&with_original_language=bn&sort_by=popularity.desc`)
+                    .then(data => renderFeed(data.results, 'bangla-feed'));
+
+                // Hindi Feed
+                fetchData(`${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&with_original_language=hi&sort_by=popularity.desc`)
+                    .then(data => renderFeed(data.results, 'hindi-feed'));
+
+                // English Feed
+                fetchData(`${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&with_original_language=en&sort_by=popularity.desc`)
+                    .then(data => renderFeed(data.results, 'english-feed'));
+
+                // Popular Movies Feed
                 fetchData(`${TMDB_BASE_URL}/movie/popular?api_key=${TMDB_API_KEY}`)
                     .then(data => renderFeed(data.results, 'popular-movies', 'movie'));
 
+                // Popular Series Feed
                 fetchData(`${TMDB_BASE_URL}/tv/popular?api_key=${TMDB_API_KEY}`)
                     .then(data => renderFeed(data.results, 'popular-series', 'tv'));
             } catch (error) {
@@ -302,7 +356,7 @@
             return response.json();
         }
 
-        // Render lists with Done filtering
+        // Render lists with Done filtering & Horizontal layout
         function renderFeed(items, containerId, forcedType = null) {
             const container = document.getElementById(containerId);
             if (!items || items.length === 0) {
@@ -319,26 +373,26 @@
             const filteredItems = items.filter(item => !doneItemsList.includes(item.id.toString()));
 
             if (filteredItems.length === 0) {
-                container.innerHTML = `<p class="text-[11px] text-zinc-600 italic">All items in this section are completed.</p>`;
+                container.innerHTML = `<p class="text-[11px] text-zinc-600 italic whitespace-nowrap">All items are completed.</p>`;
                 return;
             }
 
-            container.innerHTML = filteredItems.slice(0, 5).map(item => {
+            container.innerHTML = filteredItems.slice(0, 10).map(item => {
                 const title = item.title || item.name || 'Untitled';
                 const rating = item.vote_average ? item.vote_average.toFixed(1) : 'N/A';
                 const poster = item.poster_path ? `${IMAGE_BASE_URL}${item.poster_path}` : 'https://placehold.co/150x225/222/999?text=No+Poster';
                 const year = (item.release_date || item.first_air_date || '').split('-')[0] || 'N/A';
                 
                 return `
-                    <div class="glass p-3 rounded-xl flex gap-3 items-center justify-between">
-                        <div class="flex items-center gap-3">
-                            <img src="${poster}" alt="${title}" class="w-12 h-18 object-cover rounded-lg border border-zinc-800">
-                            <div class="max-w-[180px]">
-                                <h4 class="text-sm font-semibold text-zinc-200 line-clamp-1">${title}</h4>
-                                <p class="text-xs text-zinc-400">${year} • <i class="fa-solid fa-star text-yellow-500 text-[10px]"></i> ${rating}</p>
+                    <div class="glass p-2.5 rounded-xl flex flex-col justify-between gap-2 w-32 shrink-0">
+                        <div class="space-y-1.5">
+                            <img src="${poster}" alt="${title}" class="w-full h-36 object-cover rounded-lg border border-zinc-800">
+                            <div>
+                                <h4 class="text-xs font-semibold text-zinc-200 line-clamp-1">${title}</h4>
+                                <p class="text-[10px] text-zinc-400">${year} • <i class="fa-solid fa-star text-yellow-500 text-[9px]"></i> ${rating}</p>
                             </div>
                         </div>
-                        <button onclick="importToPost('${item.id}')" class="bg-red-600 hover:bg-red-500 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors flex items-center gap-1 whitespace-nowrap">
+                        <button onclick="importToPost('${item.id}')" class="w-full bg-red-600 hover:bg-red-500 text-white text-[10px] font-semibold py-1.5 rounded-lg transition-colors flex items-center justify-center gap-1">
                             <i class="fa-solid fa-file-import"></i> Import
                         </button>
                     </div>
@@ -377,10 +431,12 @@
             const rating = item.vote_average ? `${item.vote_average.toFixed(1)}/10` : '7.5/10';
             const desc = item.overview || '';
             const poster = item.poster_path ? `${IMAGE_BASE_URL}${item.poster_path}` : 'https://placehold.co/150x225/222/999?text=No+Poster';
+            const releaseDate = item.release_date || item.first_air_date || 'N/A';
 
             document.getElementById('post-movie-id').value = id;
             document.getElementById('post-title').value = title;
             document.getElementById('post-rating').value = rating;
+            document.getElementById('post-release').value = releaseDate;
             document.getElementById('post-desc').value = desc;
             document.getElementById('post-img-url').value = poster;
             
@@ -391,14 +447,11 @@
             switchTab('post');
         }
 
-        // Copy Post text with requested styling format:
-        // **Titel** (bold text)
-        // IMdb Rating
-        // Description
-        // **wacth Now** (bold text)
+        // Copy Post text with specific requested styling format
         function copyPostText() {
             const title = document.getElementById('post-title').value.trim();
             const rating = document.getElementById('post-rating').value.trim();
+            const release = document.getElementById('post-release').value.trim();
             const desc = document.getElementById('post-desc').value.trim();
             const watchLink = config.watchLink || '';
 
@@ -407,36 +460,64 @@
                 return;
             }
 
-            const postOutput = `**${title}**\n\nIMDb Rating: ${rating}\n\n${desc}\n\n**Watch Now: ${watchLink}**`;
+            // Output format strictly matches:
+            // **Title**
+            // IMDb Rating
+            // Release Date
+            // Description
+            // **Watch Now:** Link
+            const postOutput = `**${title}**\n\nIMDb Rating: ${rating}\n\nRelease Date: ${release}\n\n${desc}\n\n**Watch Now:** ${watchLink}`;
 
             navigator.clipboard.writeText(postOutput)
                 .then(() => alert('Copied successfully!'))
                 .catch(err => console.error(err));
         }
 
-        // Download Image
+        // Download Image (Canvas & CORS fallback to trigger direct download)
         async function downloadPoster() {
             const imgUrl = document.getElementById('post-img-url').value;
             const title = document.getElementById('post-title').value || 'movie_poster';
 
             if (!imgUrl) return;
 
+            const safeName = title.toLowerCase().replace(/[^a-z0-9]+/g, '_') + '_poster.jpg';
+
             try {
+                // Method 1: Fetch as Blob directly
                 const response = await fetch(imgUrl);
                 const blob = await response.blob();
                 const blobUrl = window.URL.createObjectURL(blob);
                 
                 const link = document.createElement('a');
                 link.href = blobUrl;
-                const safeName = title.toLowerCase().replace(/[^a-z0-9]+/g, '_');
-                link.download = `${safeName}_poster.jpg`;
-                
+                link.download = safeName;
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
                 window.URL.revokeObjectURL(blobUrl);
             } catch (err) {
-                window.open(imgUrl, '_blank');
+                console.warn("Blob fetch failed, falling back to Canvas bypass:", err);
+                // Method 2: Fallback draw on canvas (bypasses direct save restriction in some browsers)
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    canvas.toBlob((blob) => {
+                        const blobUrl = window.URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.href = blobUrl;
+                        link.download = safeName;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        window.URL.revokeObjectURL(blobUrl);
+                    }, 'image/jpeg', 0.95);
+                };
+                img.src = imgUrl;
             }
         }
 
@@ -474,6 +555,7 @@
                 document.getElementById('post-movie-id').value = '';
                 document.getElementById('post-title').value = '';
                 document.getElementById('post-rating').value = '';
+                document.getElementById('post-release').value = '';
                 document.getElementById('post-desc').value = '';
                 document.getElementById('post-img-url').value = '';
                 document.getElementById('poster-preview-container').classList.add('hidden');
