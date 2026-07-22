@@ -37,6 +37,21 @@
     <!-- Floating Toast Container (For Non-blocking modern notifications) -->
     <div id="toast-container" class="fixed top-5 left-1/2 -translate-x-1/2 z-[99999] flex flex-col gap-2 pointer-events-none max-w-xs w-full px-4"></div>
 
+    <!-- Custom Confirm Modal Container (Replaces browser-native confirm popup) -->
+    <div id="confirm-modal" class="fixed inset-0 z-[999999] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm opacity-0 pointer-events-none transition-all duration-300">
+        <div class="glass bg-zinc-950/95 border border-red-500/30 max-w-xs w-full p-5 rounded-2xl shadow-2xl transform scale-95 transition-all duration-300 space-y-4">
+            <div class="flex items-center gap-2.5 text-red-500">
+                <i class="fa-solid fa-triangle-exclamation text-lg"></i>
+                <h3 class="font-bold text-sm tracking-wider">Confirmation</h3>
+            </div>
+            <p id="confirm-modal-message" class="text-xs text-zinc-300 leading-relaxed">Are you sure you want to perform this action?</p>
+            <div class="flex gap-2.5 pt-2">
+                <button id="confirm-modal-cancel" class="flex-1 bg-zinc-900 hover:bg-zinc-850 text-zinc-300 border border-zinc-800 py-2.5 rounded-xl text-xs font-semibold transition-all">Cancel</button>
+                <button id="confirm-modal-ok" class="flex-1 bg-red-600 hover:bg-red-500 text-white py-2.5 rounded-xl text-xs font-semibold transition-all shadow-lg shadow-red-900/30">OK</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Header -->
     <header class="glass sticky top-0 z-50 px-4 py-3 flex items-center justify-between border-b border-red-500/20">
         <div class="flex items-center gap-2">
@@ -277,6 +292,44 @@
             }, 2500);
         }
 
+        // CUSTOM MODAL CONFIRM SYSTEM (Replaces native browser confirm dialogs)
+        function showConfirm(message) {
+            return new Promise((resolve) => {
+                const modal = document.getElementById('confirm-modal');
+                const modalBox = modal.querySelector('.transform');
+                const messageEl = document.getElementById('confirm-modal-message');
+                const cancelBtn = document.getElementById('confirm-modal-cancel');
+                const okBtn = document.getElementById('confirm-modal-ok');
+
+                messageEl.textContent = message;
+
+                // Open Animation
+                modal.classList.remove('opacity-0', 'pointer-events-none');
+                modalBox.classList.remove('scale-95');
+
+                function onCancel() {
+                    cleanup();
+                    resolve(false);
+                }
+
+                function onOk() {
+                    cleanup();
+                    resolve(true);
+                }
+
+                function cleanup() {
+                    cancelBtn.removeEventListener('click', onCancel);
+                    okBtn.removeEventListener('click', onOk);
+                    // Close Animation
+                    modal.classList.add('opacity-0', 'pointer-events-none');
+                    modalBox.classList.add('scale-95');
+                }
+
+                cancelBtn.addEventListener('click', onCancel);
+                okBtn.addEventListener('click', onOk);
+            });
+        }
+
         // UI update for Database Status
         function setDbStatus(statusText, isError = false) {
             const badge = document.getElementById('db-status-badge');
@@ -488,9 +541,10 @@
             showToast('Loaded into Post template!');
         }
 
-        // Reset and clear the entire post form
-        function clearPostForm() {
-            if (confirm('Are you sure you want to clear the form?')) {
+        // Reset and clear the entire post form (Using custom glassy confirmation modal)
+        async function clearPostForm() {
+            const confirmed = await showConfirm('Are you sure you want to clear the form?');
+            if (confirmed) {
                 document.getElementById('post-movie-id').value = '';
                 document.getElementById('post-title').value = '';
                 document.getElementById('post-rating').value = '';
@@ -658,9 +712,10 @@
             }
         }
 
-        // Clear All list
+        // Clear All list (Using custom glassy confirmation modal)
         async function clearDoneList() {
-            if (confirm('Delete all records from Firebase database?')) {
+            const confirmed = await showConfirm('Delete all records from Firebase database?');
+            if (confirmed) {
                 try {
                     const response = await fetch(`${FIREBASE_DB_URL}/done_movies.json`, {
                         method: 'DELETE'
