@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -33,6 +33,9 @@
     </style>
 </head>
 <body class="text-gray-200 min-h-screen pb-24 font-sans selection:bg-red-500 selection:text-white">
+
+    <!-- Floating Toast Container (For Non-blocking modern notifications) -->
+    <div id="toast-container" class="fixed top-5 left-1/2 -translate-x-1/2 z-[99999] flex flex-col gap-2 pointer-events-none max-w-xs w-full px-4"></div>
 
     <!-- Header -->
     <header class="glass sticky top-0 z-50 px-4 py-3 flex items-center justify-between border-b border-red-500/20">
@@ -243,6 +246,37 @@
 
         let doneItemsList = []; // Firebase loaded marked completed list
 
+        // SLEEK CUSTOM TOAST SYSTEM (Replaces native alert popups)
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+
+            const toast = document.createElement('div');
+            
+            const isError = type === 'error';
+            const icon = isError ? 'fa-circle-xmark text-red-500' : 'fa-circle-check text-emerald-500';
+            const borderColor = isError ? 'border-red-500/30' : 'border-emerald-500/30';
+            const textColor = isError ? 'text-red-400' : 'text-emerald-400';
+
+            toast.className = `glass bg-zinc-950/95 ${textColor} border ${borderColor} px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2.5 text-xs font-semibold transform translate-y-4 opacity-0 transition-all duration-300`;
+            toast.innerHTML = `<i class="fa-solid ${icon} text-sm"></i> <span>${message}</span>`;
+            
+            container.appendChild(toast);
+            
+            // Trigger transition in
+            setTimeout(() => {
+                toast.classList.remove('translate-y-4', 'opacity-0');
+            }, 10);
+            
+            // Auto fade out & remove from DOM
+            setTimeout(() => {
+                toast.classList.add('translate-y-4', 'opacity-0');
+                setTimeout(() => {
+                    toast.remove();
+                }, 300);
+            }, 2500);
+        }
+
         // UI update for Database Status
         function setDbStatus(statusText, isError = false) {
             const badge = document.getElementById('db-status-badge');
@@ -318,7 +352,7 @@
             config.watchLink = watchLink;
 
             updateWatchLinkInPost();
-            alert('Settings saved!');
+            showToast('Settings saved successfully!');
         }
 
         function updateWatchLinkInPost() {
@@ -418,7 +452,7 @@
                 renderFeed(res.results, 'search-results');
                 resultsSection.scrollIntoView({ behavior: 'smooth' });
             } catch (err) {
-                alert('Search failed.');
+                showToast('Search failed.', 'error');
             }
         }
 
@@ -451,6 +485,7 @@
             document.getElementById('poster-preview-container').classList.remove('hidden');
 
             switchTab('post');
+            showToast('Loaded into Post template!');
         }
 
         // Reset and clear the entire post form
@@ -464,6 +499,7 @@
                 document.getElementById('post-img-url').value = '';
                 document.getElementById('poster-preview-container').classList.add('hidden');
                 document.getElementById('poster-preview').src = '';
+                showToast('Form cleared successfully!');
             }
         }
 
@@ -476,7 +512,7 @@
             const watchLink = config.watchLink || '';
 
             if (!title) {
-                alert('Form is empty.');
+                showToast('Form is empty.', 'error');
                 return;
             }
 
@@ -489,7 +525,7 @@
             const postOutput = `**${title}**\n\nIMDb Rating: ${rating}\n\nRelease Date: ${release}\n\n${desc}\n\n**Watch Now:** ${watchLink}`;
 
             navigator.clipboard.writeText(postOutput)
-                .then(() => alert('Copied successfully!'))
+                .then(() => showToast('Post copied to clipboard!'))
                 .catch(err => console.error(err));
         }
 
@@ -499,7 +535,7 @@
             const title = document.getElementById('post-title').value || 'movie_poster';
 
             if (!imgUrl) {
-                alert('No image to download.');
+                showToast('No image to download.', 'error');
                 return;
             }
 
@@ -530,7 +566,7 @@
                     
                     canvas.toBlob((blob) => {
                         if (!blob) {
-                            alert('Could not render image.');
+                            showToast('Could not render image.', 'error');
                             resetBtn();
                             return;
                         }
@@ -543,6 +579,7 @@
                         document.body.removeChild(link);
                         window.URL.revokeObjectURL(blobUrl);
 
+                        showToast('High-quality image downloaded!');
                         resetBtn();
                     }, 'image/jpeg', 1.0); // Maximum quality JPEG encoding (1.0)
                 };
@@ -550,6 +587,7 @@
                 img.onerror = function() {
                     // Fallback to opening link directly if browser denies canvas rendering
                     window.open(highResUrl, '_blank');
+                    showToast('Opening high-quality image in new tab.');
                     resetBtn();
                 };
 
@@ -572,7 +610,7 @@
             const doneBtn = document.getElementById('done-btn');
 
             if (!movieId) {
-                alert('Please import a movie first.');
+                showToast('Please import a movie first.', 'error');
                 return;
             }
 
@@ -604,7 +642,8 @@
                 document.getElementById('post-img-url').value = '';
                 document.getElementById('poster-preview-container').classList.add('hidden');
 
-                alert(`"${title}" successfully saved and removed from feeds.`);
+                // Custom elegant toast instead of standard alert popup
+                showToast(`"${title}" saved and removed from feeds!`);
 
                 await fetchFeeds();
                 clearSearch();
@@ -612,7 +651,7 @@
 
             } catch (err) {
                 console.error("Firebase write error: ", err);
-                alert("Could not sync with database.");
+                showToast("Could not sync with database.", 'error');
             } finally {
                 doneBtn.disabled = false;
                 doneBtn.innerHTML = `<i class="fa-regular fa-circle-check"></i> Done (Sync to Firebase)`;
@@ -628,13 +667,13 @@
                     });
                     if (!response.ok) throw new Error("Delete failed");
                     doneItemsList = [];
-                    alert('Cloud Database cleared.');
+                    showToast('Cloud Database cleared successfully!');
                     await fetchFeeds();
                 } catch (err) {
-                    alert('Error: ' + err.message);
+                    showToast('Error: ' + err.message, 'error');
                 }
             }
         }
     </script>
 </body>
-    </html>
+</html>
