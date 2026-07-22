@@ -210,6 +210,12 @@
                     <input type="text" id="setting-watch-link" placeholder="https://example.com/watch" class="w-full bg-zinc-900/80 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-red-500">
                 </div>
 
+                <!-- Custom Watermark Input -->
+                <div class="space-y-2">
+                    <label class="text-xs text-zinc-300 block font-medium">Custom Watermark Text</label>
+                    <input type="text" id="setting-watermark-text" placeholder="MOVIE ZONE" class="w-full bg-zinc-900/80 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-red-500 font-bold uppercase">
+                </div>
+
                 <button onclick="saveSettings()" class="w-full bg-red-600 hover:bg-red-500 text-white py-2.5 rounded-xl font-medium text-sm transition-colors mt-2">
                     Save Changes
                 </button>
@@ -256,7 +262,8 @@
 
         // App Local States
         let config = {
-            watchLink: localStorage.getItem('watch_now_link') || ''
+            watchLink: localStorage.getItem('watch_now_link') || '',
+            watermarkText: localStorage.getItem('watermark_text') || 'MOVIE ZONE'
         };
 
         // Hybrid Offline-First State: Read instantly from LocalStorage [2]
@@ -360,7 +367,6 @@
                 const mergedList = [...new Set([...doneItemsList, ...cloudList])];
                 
                 // SAFEGUARD: Cap local storage array to latest 20,000 items to prevent browser 5MB crash [2].
-                // Your complete history always remains 100% saved on Unlimited Firebase Cloud [2].
                 if (mergedList.length > 20000) {
                     doneItemsList = mergedList.slice(-20000); // Keeps only the most recent 20k
                 } else {
@@ -379,6 +385,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             // UI fields initialization
             document.getElementById('setting-watch-link').value = config.watchLink;
+            document.getElementById('setting-watermark-text').value = config.watermarkText;
             updateWatchLinkInPost();
             
             // Switch tab to first page
@@ -414,8 +421,13 @@
 
         function saveSettings() {
             const watchLink = document.getElementById('setting-watch-link').value.trim();
+            const watermarkText = document.getElementById('setting-watermark-text').value.trim().toUpperCase() || 'MOVIE ZONE';
+            
             localStorage.setItem('watch_now_link', watchLink);
+            localStorage.setItem('watermark_text', watermarkText);
+            
             config.watchLink = watchLink;
+            config.watermarkText = watermarkText;
 
             updateWatchLinkInPost();
             showToast('Settings saved successfully!');
@@ -601,7 +613,7 @@
                 .catch(err => console.error(err));
         }
 
-        // Direct Download with High Quality and CORS/Cache Bypass
+        // Direct Download with High Quality, Custom Watermark Badge & CORS Bypass
         async function downloadPoster() {
             const imgUrl = document.getElementById('post-img-url').value;
             const title = document.getElementById('post-title').value || 'movie_poster';
@@ -611,6 +623,8 @@
                 return;
             }
 
+            const watermarkText = config.watermarkText || 'MOVIE ZONE';
+
             // Convert to high resolution "original" poster from TMDB [1]
             const highResUrl = imgUrl.replace('/p/w500/', '/p/original/');
             const safeName = title.toLowerCase().replace(/[^a-z0-9]+/g, '_') + '_poster.jpg';
@@ -618,7 +632,7 @@
             // Visual feedback on button
             const downloadBtn = document.querySelector('button[onclick="downloadPoster()"]');
             const originalHTML = downloadBtn.innerHTML;
-            downloadBtn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Downloading...`;
+            downloadBtn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Processing...`;
             downloadBtn.disabled = true;
 
             try {
@@ -634,8 +648,39 @@
                     canvas.width = img.width;
                     canvas.height = img.height;
                     const ctx = canvas.getContext('2d');
+                    
+                    // 1. Draw Original Movie Poster
                     ctx.drawImage(img, 0, 0);
                     
+                    // 2. Add Dynamic Custom Watermark Badge (Bottom Right)
+                    // Scale font and padding automatically based on resolution
+                    const fontSize = Math.max(16, Math.floor(img.width * 0.035)); // 3.5% of width, min 16px
+                    ctx.font = `bold ${fontSize}px "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif`;
+                    
+                    const textWidth = ctx.measureText(watermarkText).width;
+                    const paddingX = fontSize * 0.8;
+                    const paddingY = fontSize * 0.45;
+                    const badgeWidth = textWidth + paddingX * 2;
+                    const badgeHeight = fontSize + paddingY * 2;
+                    
+                    // Calculate positions (margin is 3% of width/height from the edge)
+                    const x = img.width - badgeWidth - (img.width * 0.03);
+                    const y = img.height - badgeHeight - (img.height * 0.03);
+                    
+                    // A. Draw Badge Background (Sleek Dark Glass style)
+                    ctx.fillStyle = "rgba(10, 10, 10, 0.75)";
+                    ctx.fillRect(x, y, badgeWidth, badgeHeight);
+                    
+                    // B. Draw Red Decorative Accent Bar on the left edge of badge
+                    ctx.fillStyle = "#ef4444"; // Tailwind Red-500
+                    ctx.fillRect(x, y, Math.max(3, Math.floor(img.width * 0.006)), badgeHeight);
+                    
+                    // C. Draw Watermark Text inside the badge
+                    ctx.fillStyle = "#ffffff";
+                    ctx.textBaseline = "middle";
+                    ctx.fillText(watermarkText, x + paddingX, y + (badgeHeight / 2));
+                    
+                    // 3. Export and Download high-quality canvas blob
                     canvas.toBlob((blob) => {
                         if (!blob) {
                             showToast('Could not render image.', 'error');
@@ -651,7 +696,7 @@
                         document.body.removeChild(link);
                         window.URL.revokeObjectURL(blobUrl);
 
-                        showToast('High-quality image downloaded!');
+                        showToast('Watermarked poster saved!');
                         resetBtn();
                     }, 'image/jpeg', 1.0); // Maximum quality JPEG encoding (1.0)
                 };
@@ -752,4 +797,4 @@
         }
     </script>
 </body>
-</html>
+         </html>
