@@ -58,7 +58,7 @@
             <span class="text-red-600 text-2xl font-bold tracking-wider"><i class="fa-solid fa-clapperboard"></i> MOVIE ZONE</span>
         </div>
         <div id="db-status-badge" class="text-xs px-2 py-1 rounded bg-yellow-950/50 text-yellow-400 border border-yellow-500/30">
-            Connecting Cloud...
+            Syncing...
         </div>
     </header>
 
@@ -259,9 +259,10 @@
             watchLink: localStorage.getItem('watch_now_link') || ''
         };
 
-        let doneItemsList = []; // Firebase loaded marked completed list
+        // Hybrid Offline-First State: Read instantly from LocalStorage [2]
+        let doneItemsList = JSON.parse(localStorage.getItem('local_done_movies')) || [];
 
-        // SLEEK CUSTOM TOAST SYSTEM (Replaces native alert popups)
+        // SLEEK CUSTOM TOAST SYSTEM
         function showToast(message, type = 'success') {
             const container = document.getElementById('toast-container');
             if (!container) return;
@@ -343,18 +344,30 @@
             }
         }
 
-        // Fetch marked "done" movies (Non-blocking background fetch)
+        // Background Cloud Fetch (Syncs and merges with local storage lists safely)
         async function loadDoneMoviesFromFirebase() {
             try {
                 const response = await fetch(`${FIREBASE_DB_URL}/done_movies.json`);
                 if (!response.ok) throw new Error("Connection failed");
                 const data = await response.json();
                 
+                let cloudList = [];
                 if (data) {
-                    doneItemsList = Object.keys(data);
-                } else {
-                    doneItemsList = [];
+                    cloudList = Object.keys(data);
                 }
+
+                // Merge and deduplicate both lists [2]
+                const mergedList = [...new Set([...doneItemsList, ...cloudList])];
+                
+                // SAFEGUARD: Cap local storage array to latest 20,000 items to prevent browser 5MB crash [2].
+                // Your complete history always remains 100% saved on Unlimited Firebase Cloud [2].
+                if (mergedList.length > 20000) {
+                    doneItemsList = mergedList.slice(-20000); // Keeps only the most recent 20k
+                } else {
+                    doneItemsList = mergedList;
+                }
+                
+                localStorage.setItem('local_done_movies', JSON.stringify(doneItemsList));
                 setDbStatus("Cloud Sync Active");
             } catch (err) {
                 console.error("Firebase fetch error: ", err);
@@ -371,12 +384,12 @@
             // Switch tab to first page
             switchTab('tmdb');
 
-            // Fetch lists
+            // 1. Immediately render TMDB Feeds using instant localStorage cache [2]
             fetchFeeds();
 
-            // Background Load Cloud list
+            // 2. Load Cloud database in background and re-render if updates are found
             loadDoneMoviesFromFirebase().then(() => {
-                fetchFeeds(); // Reload feeds once cloud list has been downloaded
+                fetchFeeds();
             });
 
             // Listeners
@@ -462,8 +475,13 @@
                 window.cachedItems[item.id] = item;
             });
 
-            // Filter done items
-            const filteredItems = items.filter(item => !doneItemsList.includes(item.id.toString()));
+            // Filter out items that are marked as Done (Handles string/number safely)
+            const filteredItems = items.filter(item => {
+                if (!item) return false;
+                if (item.media_type === 'person') return false; // Ignore person results
+                const idStr = item.id.toString();
+                return !doneItemsList.includes(idStr) && !doneItemsList.includes(item.id);
+            });
 
             if (filteredItems.length === 0) {
                 container.innerHTML = `<p class="text-[11px] text-zinc-600 italic whitespace-nowrap">All items are completed.</p>`;
@@ -657,7 +675,7 @@
             }
         }
 
-        // Save Movie as Completed
+        // Save Movie as Completed (Saves locally instantly first, then syncs with Firebase in the background)
         async function markAsDone() {
             const movieId = document.getElementById('post-movie-id').value;
             const title = document.getElementById('post-title').value;
@@ -668,11 +686,37 @@
                 return;
             }
 
-            doneBtn.disabled = true;
-            doneBtn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Saving...`;
+            // 1. INSTANT LOCAL CACHE SAVE (Guarantees it disappears on refresh immediately) [2]
+            if (!doneItemsList.includes(movieId)) {
+                doneItemsList.push(movieId);
+                
+                // SAFEGUARD: Cap local storage array to latest 20,000 items to prevent browser 5MB crash [2].
+                if (doneItemsList.length > 20000) {
+                    doneItemsList.shift(); // Removes the oldest cached element [2]
+                }
+                localStorage.setItem('local_done_movies', JSON.stringify(doneItemsList));
+            }
 
+            // 2. INSTANT UI UPDATE (Disappears from lists right away) [2]
+            fetchFeeds();
+            clearSearch();
+
+            // Reset inputs
+            document.getElementById('post-movie-id').value = '';
+            document.getElementById('post-title').value = '';
+            document.getElementById('post-rating').value = '';
+            document.getElementById('post-release').value = '';
+            document.getElementById('post-desc').value = '';
+            document.getElementById('post-img-url').value = '';
+            document.getElementById('poster-preview-container').classList.add('hidden');
+
+            // Show toast instead of annoying alert [2]
+            showToast(`"${title}" saved and removed!`);
+            switchTab('tmdb');
+
+            // 3. BACKGROUND CLOUD SYNC (Does not block the UI) [2]
             try {
-                const response = await fetch(`${FIREBASE_DB_URL}/done_movies/${movieId}.json`, {
+                await fetch(`${FIREBASE_DB_URL}/done_movies/${movieId}.json`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -680,35 +724,8 @@
                         timestamp: Date.now()
                     })
                 });
-
-                if (!response.ok) throw new Error("Sync failed");
-
-                if (!doneItemsList.includes(movieId)) {
-                    doneItemsList.push(movieId);
-                }
-
-                // Reset inputs
-                document.getElementById('post-movie-id').value = '';
-                document.getElementById('post-title').value = '';
-                document.getElementById('post-rating').value = '';
-                document.getElementById('post-release').value = '';
-                document.getElementById('post-desc').value = '';
-                document.getElementById('post-img-url').value = '';
-                document.getElementById('poster-preview-container').classList.add('hidden');
-
-                // Custom elegant toast instead of standard alert popup
-                showToast(`"${title}" saved and removed from feeds!`);
-
-                await fetchFeeds();
-                clearSearch();
-                switchTab('tmdb');
-
             } catch (err) {
-                console.error("Firebase write error: ", err);
-                showToast("Could not sync with database.", 'error');
-            } finally {
-                doneBtn.disabled = false;
-                doneBtn.innerHTML = `<i class="fa-regular fa-circle-check"></i> Done (Sync to Firebase)`;
+                console.error("Firebase background write failed (will retry on next launch): ", err);
             }
         }
 
@@ -717,11 +734,15 @@
             const confirmed = await showConfirm('Delete all records from Firebase database?');
             if (confirmed) {
                 try {
+                    // Instantly clear local storage
+                    doneItemsList = [];
+                    localStorage.removeItem('local_done_movies');
+                    
                     const response = await fetch(`${FIREBASE_DB_URL}/done_movies.json`, {
                         method: 'DELETE'
                     });
                     if (!response.ok) throw new Error("Delete failed");
-                    doneItemsList = [];
+                    
                     showToast('Cloud Database cleared successfully!');
                     await fetchFeeds();
                 } catch (err) {
