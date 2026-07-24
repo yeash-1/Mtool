@@ -191,6 +191,11 @@
                         </button>
                     </div>
                     
+                    <!-- Share Button (Telegram Accent Color) -->
+                    <button id="share-btn" onclick="shareToTelegram()" class="w-full bg-sky-600 hover:bg-sky-500 text-white py-3 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-sky-950/40">
+                        <i class="fa-brands fa-telegram text-lg"></i> Share to Telegram
+                    </button>
+
                     <!-- Done Button -->
                     <button id="done-btn" onclick="markAsDone()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-3.5 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/20">
                         <i class="fa-regular fa-circle-check"></i> Done (Sync to Firebase)
@@ -207,7 +212,7 @@
                 <!-- Watch Now Link Config -->
                 <div class="space-y-2">
                     <label class="text-xs text-zinc-300 block font-medium">Default Watch Now Link</label>
-                    <input type="text" id="setting-watch-link" placeholder="https://example.com/watch" class="w-full bg-zinc-900/80 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-red-500">
+                    <input type="text" id="setting-watch-link" placeholder="https://example.com/watch" class="w-full bg-zinc-900/80 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-red-500 font-bold">
                 </div>
 
                 <!-- Custom Watermark Input -->
@@ -216,8 +221,23 @@
                     <input type="text" id="setting-watermark-text" placeholder="MOVIE ZONE" class="w-full bg-zinc-900/80 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-red-500 font-bold uppercase">
                 </div>
 
-                <button onclick="saveSettings()" class="w-full bg-red-600 hover:bg-red-500 text-white py-2.5 rounded-xl font-medium text-sm transition-colors mt-2">
-                    Save Changes
+                <!-- Dynamic Telegram Channels Management [2] -->
+                <div class="space-y-3 pt-2 border-t border-zinc-800/60">
+                    <label class="text-xs text-zinc-300 block font-medium">Manage Telegram Channels</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="setting-new-channel" placeholder="@channel_id" class="flex-1 bg-zinc-900/80 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-red-500 font-bold">
+                        <button onclick="addTelegramChannel()" class="bg-red-600 hover:bg-red-500 text-white px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1 shrink-0 shadow-lg shadow-red-950/20">
+                            <i class="fa-solid fa-plus"></i> Add
+                        </button>
+                    </div>
+                    <!-- Container for channels list -->
+                    <div id="tg-channels-list" class="space-y-2 max-h-36 overflow-y-auto no-scrollbar pt-1">
+                        <!-- Dynamic content -->
+                    </div>
+                </div>
+
+                <button onclick="saveSettings()" class="w-full bg-red-600 hover:bg-red-500 text-white py-2.5 rounded-xl font-medium text-sm transition-colors mt-4">
+                    Save General Changes
                 </button>
 
                 <!-- Cloud Database Management -->
@@ -253,6 +273,7 @@
         // HARDCODED CONFIGURATIONS
         const TMDB_API_KEY = "3dcff4c2aae103e7a50ee7935ea29af9";
         const FIREBASE_DB_URL = "https://movie-zone-tool-default-rtdb.firebaseio.com";
+        const TG_BOT_TOKEN = "8690574624:AAH8Ft2hHj2zHdWUp54iCoZdeA3Yt-MQ1CM";
         
         const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
         const IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/w500';
@@ -263,7 +284,8 @@
         // App Local States
         let config = {
             watchLink: localStorage.getItem('watch_now_link') || '',
-            watermarkText: localStorage.getItem('watermark_text') || 'MOVIE ZONE'
+            watermarkText: localStorage.getItem('watermark_text') || 'MOVIE ZONE',
+            tgChannels: JSON.parse(localStorage.getItem('telegram_channels_list')) || [] // Stores as Array now [2]
         };
 
         // Hybrid Offline-First State: Read instantly from LocalStorage [2]
@@ -386,7 +408,9 @@
             // UI fields initialization
             document.getElementById('setting-watch-link').value = config.watchLink;
             document.getElementById('setting-watermark-text').value = config.watermarkText;
+            
             updateWatchLinkInPost();
+            renderTelegramChannels(); // Populate dynamic telegram channels list [2]
             
             // Switch tab to first page
             switchTab('tmdb');
@@ -431,6 +455,65 @@
 
             updateWatchLinkInPost();
             showToast('Settings saved successfully!');
+        }
+
+        // TELEGRAM CHANNELS INTERFACE ACTIONS
+        function renderTelegramChannels() {
+            const listContainer = document.getElementById('tg-channels-list');
+            if (!listContainer) return;
+
+            if (config.tgChannels.length === 0) {
+                listContainer.innerHTML = `<p class="text-[10px] text-zinc-500 italic p-2 text-center">No Telegram channels added yet.</p>`;
+                return;
+            }
+
+            listContainer.innerHTML = config.tgChannels.map((channel, index) => {
+                return `
+                    <div class="glass bg-zinc-900/40 border border-zinc-800/80 px-3 py-2 rounded-xl flex items-center justify-between text-xs font-semibold">
+                        <span class="text-zinc-300 font-bold">${channel}</span>
+                        <button onclick="deleteTelegramChannel(${index})" class="text-red-500 hover:text-red-400 p-1 transition-colors">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function addTelegramChannel() {
+            const inputEl = document.getElementById('setting-new-channel');
+            let channelVal = inputEl.value.trim();
+
+            if (!channelVal) {
+                showToast('Please enter a Channel ID.', 'error');
+                return;
+            }
+
+            // Standardize format: ensure username channels start with @ if they are names
+            if (!channelVal.startsWith('-') && !channelVal.startsWith('@')) {
+                channelVal = '@' + channelVal;
+            }
+
+            if (config.tgChannels.includes(channelVal)) {
+                showToast('This channel is already added.', 'error');
+                return;
+            }
+
+            config.tgChannels.push(channelVal);
+            localStorage.setItem('telegram_channels_list', JSON.stringify(config.tgChannels));
+            
+            inputEl.value = ''; // Reset input field
+            renderTelegramChannels();
+            showToast('Channel added successfully!');
+        }
+
+        async function deleteTelegramChannel(index) {
+            const confirmed = await showConfirm(`Are you sure you want to remove "${config.tgChannels[index]}"?`);
+            if (confirmed) {
+                config.tgChannels.splice(index, 1);
+                localStorage.setItem('telegram_channels_list', JSON.stringify(config.tgChannels));
+                renderTelegramChannels();
+                showToast('Channel removed successfully!');
+            }
         }
 
         function updateWatchLinkInPost() {
@@ -613,34 +696,25 @@
                 .catch(err => console.error(err));
         }
 
-        // Direct Download with High Quality, Custom Watermark Badge & CORS Bypass
-        async function downloadPoster() {
-            const imgUrl = document.getElementById('post-img-url').value;
-            const title = document.getElementById('post-title').value || 'movie_poster';
+        // Helper: Generates High-Quality Canvas with Custom Watermark Badge
+        function generateWatermarkedCanvas() {
+            return new Promise((resolve, reject) => {
+                const imgUrl = document.getElementById('post-img-url').value;
+                const title = document.getElementById('post-title').value || 'movie_poster';
 
-            if (!imgUrl) {
-                showToast('No image to download.', 'error');
-                return;
-            }
+                if (!imgUrl) {
+                    reject('No image to process.');
+                    return;
+                }
 
-            const watermarkText = config.watermarkText || 'MOVIE ZONE';
+                const watermarkText = config.watermarkText || 'MOVIE ZONE';
 
-            // Convert to high resolution "original" poster from TMDB [1]
-            const highResUrl = imgUrl.replace('/p/w500/', '/p/original/');
-            const safeName = title.toLowerCase().replace(/[^a-z0-9]+/g, '_') + '_poster.jpg';
+                // Convert to high resolution "original" poster from TMDB [1]
+                const highResUrl = imgUrl.replace('/p/w500/', '/p/original/');
 
-            // Visual feedback on button
-            const downloadBtn = document.querySelector('button[onclick="downloadPoster()"]');
-            const originalHTML = downloadBtn.innerHTML;
-            downloadBtn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Processing...`;
-            downloadBtn.disabled = true;
-
-            try {
                 // Canvas rendering with cache-buster is used to resolve CORS/Cache lockouts safely
                 const img = new Image();
                 img.crossOrigin = 'anonymous'; // TMDB allows CORS on anonymous requests [1]
-                
-                // Add timestamp query parameter to bypass browser cached CORS mismatch
                 img.src = highResUrl + (highResUrl.includes('?') ? '&' : '?') + 't=' + new Date().getTime();
                 
                 img.onload = function() {
@@ -653,7 +727,6 @@
                     ctx.drawImage(img, 0, 0);
                     
                     // 2. Add Dynamic Custom Watermark Badge (Bottom Right)
-                    // Scale font and padding automatically based on resolution
                     const fontSize = Math.max(16, Math.floor(img.width * 0.035)); // 3.5% of width, min 16px
                     ctx.font = `bold ${fontSize}px "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif`;
                     
@@ -663,60 +736,157 @@
                     const badgeWidth = textWidth + paddingX * 2;
                     const badgeHeight = fontSize + paddingY * 2;
                     
-                    // Calculate positions (margin is 3% of width/height from the edge)
                     const x = img.width - badgeWidth - (img.width * 0.03);
                     const y = img.height - badgeHeight - (img.height * 0.03);
                     
-                    // A. Draw Badge Background (Sleek Dark Glass style)
+                    // A. Draw Badge Background
                     ctx.fillStyle = "rgba(10, 10, 10, 0.75)";
                     ctx.fillRect(x, y, badgeWidth, badgeHeight);
                     
-                    // B. Draw Red Decorative Accent Bar on the left edge of badge
+                    // B. Draw Red Decorative Accent Bar
                     ctx.fillStyle = "#ef4444"; // Tailwind Red-500
                     ctx.fillRect(x, y, Math.max(3, Math.floor(img.width * 0.006)), badgeHeight);
                     
-                    // C. Draw Watermark Text inside the badge
+                    // C. Draw Watermark Text
                     ctx.fillStyle = "#ffffff";
                     ctx.textBaseline = "middle";
                     ctx.fillText(watermarkText, x + paddingX, y + (badgeHeight / 2));
                     
-                    // 3. Export and Download high-quality canvas blob
-                    canvas.toBlob((blob) => {
-                        if (!blob) {
-                            showToast('Could not render image.', 'error');
-                            resetBtn();
-                            return;
-                        }
-                        const blobUrl = window.URL.createObjectURL(blob);
-                        const link = document.createElement('a');
-                        link.href = blobUrl;
-                        link.download = safeName;
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                        window.URL.revokeObjectURL(blobUrl);
-
-                        showToast('Watermarked poster saved!');
-                        resetBtn();
-                    }, 'image/jpeg', 1.0); // Maximum quality JPEG encoding (1.0)
+                    resolve(canvas);
                 };
 
                 img.onerror = function() {
-                    // Fallback to opening link directly if browser denies canvas rendering
-                    window.open(highResUrl, '_blank');
-                    showToast('Opening high-quality image in new tab.');
-                    resetBtn();
+                    reject('Could not load original image from TMDB.');
                 };
+            });
+        }
 
+        // Direct Download using Helper Function
+        async function downloadPoster() {
+            const downloadBtn = document.querySelector('button[onclick="downloadPoster()"]');
+            const originalHTML = downloadBtn.innerHTML;
+            downloadBtn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Processing...`;
+            downloadBtn.disabled = true;
+
+            const title = document.getElementById('post-title').value || 'movie_poster';
+            const safeName = title.toLowerCase().replace(/[^a-z0-9]+/g, '_') + '_poster.jpg';
+
+            try {
+                const canvas = await generateWatermarkedCanvas();
+                canvas.toBlob((blob) => {
+                    if (!blob) throw new Error("Canvas blob rendering failed.");
+                    const blobUrl = window.URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = blobUrl;
+                    link.download = safeName;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    window.URL.revokeObjectURL(blobUrl);
+
+                    showToast('Watermarked poster saved!');
+                    resetBtn();
+                }, 'image/jpeg', 1.0); // Maximum quality JPEG encoding
             } catch (err) {
-                console.error("Canvas export failed: ", err);
-                window.open(highResUrl, '_blank');
+                console.error("Download failed, using raw url open: ", err);
+                const imgUrl = document.getElementById('post-img-url').value;
+                if (imgUrl) {
+                    window.open(imgUrl.replace('/p/w500/', '/p/original/'), '_blank');
+                    showToast('Opening poster in a new tab.');
+                }
                 resetBtn();
             }
 
             function resetBtn() {
                 downloadBtn.innerHTML = originalHTML;
                 downloadBtn.disabled = false;
+            }
+        }
+
+        // Direct Share to Multiple Telegram Channels with high quality watermarked poster and details
+        async function shareToTelegram() {
+            const title = document.getElementById('post-title').value.trim();
+            const rating = document.getElementById('post-rating').value.trim();
+            const release = document.getElementById('post-release').value.trim();
+            const desc = document.getElementById('post-desc').value.trim();
+            const watchLink = config.watchLink || '';
+
+            if (!title) {
+                showToast('Form is empty. Import a movie first.', 'error');
+                return;
+            }
+
+            if (config.tgChannels.length === 0) {
+                showToast('Add Telegram channels in Settings first.', 'error');
+                return;
+            }
+
+            const shareBtn = document.getElementById('share-btn');
+            const originalHTML = shareBtn.innerHTML;
+            shareBtn.disabled = true;
+            shareBtn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Preparing Post...`;
+
+            // HTML Parsing format strictly aligned with requested Markdown text equivalent but safer for API sending
+            const captionText = `<b>${title}</b>\n\nIMDb Rating: ${rating}\n\nRelease Date: ${release}\n\n${desc}\n\n<b>Watch Now:</b> ${watchLink}`;
+
+            try {
+                showToast('Generating watermarked image...');
+                const canvas = await generateWatermarkedCanvas();
+                
+                canvas.toBlob(async (blob) => {
+                    if (!blob) {
+                        showToast('Failed to render image for sharing.', 'error');
+                        resetBtn();
+                        return;
+                    }
+
+                    showToast('Uploading to Telegram...');
+                    let successCount = 0;
+
+                    for (const chatId of config.tgChannels) {
+                        try {
+                            const formData = new FormData();
+                            formData.append('chat_id', chatId);
+                            formData.append('photo', blob, 'poster.jpg');
+                            formData.append('caption', captionText);
+                            formData.append('parse_mode', 'HTML');
+
+                            const response = await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendPhoto`, {
+                                method: 'POST',
+                                body: formData
+                            });
+
+                            if (response.ok) {
+                                successCount++;
+                            } else {
+                                const errData = await response.json();
+                                console.error(`Failed for ${chatId}: `, errData.description);
+                            }
+                        } catch (singleErr) {
+                            console.error(`Fetch error for ${chatId}: `, singleErr);
+                        }
+                    }
+
+                    if (successCount === config.tgChannels.length) {
+                        showToast(`Successfully posted to all ${successCount} channels!`);
+                    } else if (successCount > 0) {
+                        showToast(`Posted to ${successCount}/${config.tgChannels.length} channels.`);
+                    } else {
+                        showToast('Failed to post to Telegram. Check channel IDs.', 'error');
+                    }
+                    resetBtn();
+
+                }, 'image/jpeg', 0.95); // High quality compression for upload optimization
+
+            } catch (err) {
+                console.error("Telegram share failed: ", err);
+                showToast('Failed to prepare sharing: ' + err, 'error');
+                resetBtn();
+            }
+
+            function resetBtn() {
+                shareBtn.innerHTML = originalHTML;
+                shareBtn.disabled = false;
             }
         }
 
@@ -731,7 +901,7 @@
                 return;
             }
 
-            // 1. INSTANT LOCAL CACHE SAVE (Guarantees it disappears on refresh immediately) [2]
+            // 1. INSTANT LOCAL CACHE SAVE [2]
             if (!doneItemsList.includes(movieId)) {
                 doneItemsList.push(movieId);
                 
@@ -742,7 +912,7 @@
                 localStorage.setItem('local_done_movies', JSON.stringify(doneItemsList));
             }
 
-            // 2. INSTANT UI UPDATE (Disappears from lists right away) [2]
+            // 2. INSTANT UI UPDATE [2]
             fetchFeeds();
             clearSearch();
 
@@ -755,7 +925,6 @@
             document.getElementById('post-img-url').value = '';
             document.getElementById('poster-preview-container').classList.add('hidden');
 
-            // Show toast instead of annoying alert [2]
             showToast(`"${title}" saved and removed!`);
             switchTab('tmdb');
 
@@ -770,7 +939,7 @@
                     })
                 });
             } catch (err) {
-                console.error("Firebase background write failed (will retry on next launch): ", err);
+                console.error("Firebase background write failed: ", err);
             }
         }
 
@@ -797,4 +966,5 @@
         }
     </script>
 </body>
-         </html>
+</html>
+                                                                                                                                                                                     </html>
